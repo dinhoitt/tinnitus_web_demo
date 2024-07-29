@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>파일 처리</title>
+</head>
+<body>
+    <h1>파일 처리: {{ filename }}</h1>
+    <form action="/process/{{ filename }}" method="post">
+        <label for="notch_freq">이명 주파수:</label>
+        <input type="number" name="notch_freq" required><br>
+        <label for="notch_width">노치 필터 폭:</label>
+        <input type="number" name="notch_width" step="0.01" required><br>
+        <label for="ear_choice">이명이 들리는 귀 (1: 왼쪽, 2: 오른쪽):</label>
+        <input type="number" name="ear_choice" required><br>
+        <label for="sound_choice">사용할 소리 (1: 바이노럴 비트, 2: 화이트 노이즈, 3: 핑크 노이즈):</label>
+        <input type="number" name="sound_choice" required><br>
+        <label for="wave_type">웨이브 타입 (1: 알파, 2: 베타, 3: 감마):</label>
+        <input type="number" name="wave_type"><br>
+        <input type="submit" value="처리">
+    </form>
+</body>
+</html>
