@@ -29,6 +29,22 @@ def separate_stereo_channels(data):
     right_channel = data[:, 1]
     return left_channel, right_channel
 
+# 시간 축 생성 함수
+def create_time_axis(data, fs):
+    return np.arange(0, len(data)) / fs
+
+# 노치 필터의 옥타브 폭 설정 함수
+def get_octave_width(notch_freq):
+    octave_ratio = 2 ** (1/12)  # 반음 간격의 비율
+    options = {
+        1: 12,
+        2: 6,
+        3: 3
+    }
+    choice = int(request.form['notch_width'])
+    if choice in options:
+        return notch_freq * (octave_ratio ** options[choice] - octave_ratio ** (-options[choice]))
+
 # 노치 필터 적용 함수
 def apply_notch_filter(data, notch_freq, notch_width, fs):
     quality_factor = notch_freq / notch_width
@@ -66,6 +82,14 @@ def bandpass_filter(data, lowcut, highcut, fs, order=5):
 def save_filtered_data(filtered_data, file_path, fs):
     wavfile.write(file_path, fs, filtered_data)
 
+# 구간별 평균 볼륨 계산 함수
+def calculate_segment_volume(audio, segment_duration_ms):
+    segments = []
+    for i in range(0, len(audio), segment_duration_ms):
+        segment = audio[i:i+segment_duration_ms]
+        segments.append(segment.dBFS)
+    return segments
+
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
@@ -80,21 +104,23 @@ def upload_file():
 def process_file(filename):
     if request.method == 'POST':
         notch_freq = int(request.form['notch_freq'])
-        notch_width = float(request.form['notch_width'])
+        notch_width = get_octave_width(notch_freq) #float(request.form['notch_width'])
         ear_choice = int(request.form['ear_choice'])
         sound_choice = int(request.form['sound_choice'])
-        wave_type = int(request.form['wave_type'])
+        if sound_choice == 1:
+            wave_type = int(request.form['wave_type'])
+            wave_freq_diff = {1: 10, 2: 20, 3: 40}.get(wave_type, 10)
 
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         audio, fs, data = read_audio_file(file_path)
         
         left_channel, right_channel = separate_stereo_channels(data)
-        
-        wave_freq_diff = {1: 10, 2: 20, 3: 40}.get(wave_type, 10)
-    
+
+        # 채널마다 필터 적용
         filtered_data_left = apply_notch_filter(left_channel, notch_freq, notch_width, fs)
         filtered_data_right = apply_notch_filter(right_channel, notch_freq, notch_width, fs)
         
+        # 데이터를 int16 형식으로 변환
         filtered_data_left = np.int16(filtered_data_left / np.max(np.abs(filtered_data_left)) * 32767)
         filtered_data_right = np.int16(filtered_data_right / np.max(np.abs(filtered_data_right)) * 32767)
         
@@ -103,27 +129,41 @@ def process_file(filename):
         filtered_file_path = os.path.join(app.config['PROCESSED_FOLDER'], 'filtered.wav')
         save_filtered_data(filtered_data, filtered_file_path, fs)
         
+        # 필터링된 오디오 불러오기
         filtered_audio = AudioSegment.from_file(filtered_file_path)
         
-        segment_duration_ms = 10000  # 10초 단위로 구간 나누기
+        # 구간별 평균 볼륨 계산
+        segment_duration_ms = 5000  # 5초 단위로 구간 나누기
         segment_volumes = calculate_segment_volume(filtered_audio, segment_duration_ms)
         
+        # 기존 오디오의 평균 볼륨 측정
         average_dbfs = filtered_audio.dBFS
         
+        # 밴드패스 필터 설정
         lowcut = notch_freq - notch_width / 2
         highcut = notch_freq + notch_width / 2
         
         combined_audio = AudioSegment.silent(duration=len(filtered_audio))
         
         if sound_choice == 1:
+            # 이명 주파수에 따른 바이노럴 비트 주파수 계산
             frequency_left, frequency_right = (notch_freq, notch_freq + wave_freq_diff) if ear_choice == 1 else (notch_freq + wave_freq_diff, notch_freq)
+            # 각 구간의 평균 볼륨을 기반으로 사인파 합성
             for i, segment_volume in enumerate(segment_volumes):
+                # 현재 구간의 길이를 계산 (구간의 길이가 남은 오디오 길이를 초과하지 않도록 함)
                 duration_ms = min(segment_duration_ms, len(filtered_audio) - i * segment_duration_ms)
+                # 현재 구간의 시작 시간(ms)
                 start_ms = i * segment_duration_ms
+
+                # 채널 별 사인파 생성 및 볼륨 조절 (구간 볼륨 - 5dB)
                 sine_right = Sine(frequency_right).to_audio_segment(duration=duration_ms).apply_gain(segment_volume - 5)
                 sine_left = Sine(frequency_left).to_audio_segment(duration=duration_ms).apply_gain(segment_volume - 5)
+                # 왼쪽과 오른쪽 사인파를 결합하여 스테레오 사인파 생성
                 stereo_sine = AudioSegment.from_mono_audiosegments(sine_left, sine_right)
+
+                # 기존 오디오의 현재 구간과 사인파를 합성
                 combined_audio = combined_audio.overlay(filtered_audio[start_ms:start_ms + duration_ms], position=start_ms)
+                # 스테레오 사인파를 기존 오디오에 합성
                 combined_audio = combined_audio.overlay(stereo_sine, position=start_ms)
         elif sound_choice == 2:
             white_noise = WhiteNoise().to_audio_segment(duration=len(filtered_audio)).apply_gain(average_dbfs - 10)
@@ -141,16 +181,18 @@ def process_file(filename):
         else:
             return "유효하지 않은 선택입니다."
         
-        output_filename = f'processed_{filename}'
+        output_filename = f'processed_{os.path.splitext(filename)[0]}.mp3'
         output_filepath = os.path.join(app.config['PROCESSED_FOLDER'], output_filename)
         combined_audio.export(output_filepath, format="mp3")
         return redirect(url_for('download_file', filename=output_filename))
+
     
     return render_template('process.html', filename=filename)
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    return send_file(os.path.join(app.config['PROCESSED_FOLDER'], filename), as_attachment=True)
+    return send_file(os.path.join(app.config['PROCESSED_FOLDER'], filename), as_attachment=True, mimetype='audio/mp3')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
