@@ -2,26 +2,29 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>이명 치료음 합성</title>
+    <link rel="stylesheet" href="{{ url_for('serve_static_from_templates', filename='styles.css') }}">
 </head>
 <body>
-    <h1>이명 치료음 합성: {{ filename }}</h1>
-    <form action="/process/{{ filename }}" method="post">
-        <label for="notch_freq">이명 주파수를 입력하세요 (예: 880):</label>
-        <input type="number" name="notch_freq" required><br>
-        <label for="notch_width">노치 필터 폭을 선택하세요 (1: 1옥타브, 2: 1/2옥타브, 3: 1/4옥타브):</label>
-        <input type="number" name="notch_width" min="1" max="3" required><br>
-        <label for="ear_choice">이명이 들리는 귀를 선택하세요 (1: 왼쪽, 2: 오른쪽):</label>
-        <input type="number" name="ear_choice" min="1" max="2" required><br>
-        <label for="sound_choice">사용할 소리를 선택하세요 (1: 바이노럴 비트, 2: 화이트 노이즈, 3: 핑크 노이즈):</label>
-        <input type="number" name="sound_choice" min="1" max="3" required><br>
-        <div id="wave_type_section" style="display: none;">
-            <label for="wave_type">웨이브 타입을 선택하세요 (1: 알파, 2: 베타, 3: 감마):</label>
-            <input type="number" name="wave_type" min="1" max="3"><br>
-        </div>
-        <input type="submit" value="다운로드">
-    </form>
-
+    <div class="container">
+        <h1>이명 치료음 합성: {{ filename }}</h1>
+        <form action="/process/{{ filename }}" method="post">
+            <label for="notch_freq">이명 주파수를 입력하세요 (예: 880):</label>
+            <input type="number" name="notch_freq" required><br>
+            <label for="notch_width">노치 필터 폭을 선택하세요 (1: 1옥타브, 2: 1/2옥타브, 3: 1/4옥타브):</label>
+            <input type="number" name="notch_width" min="1" max="3" required><br>
+            <label for="ear_choice">이명이 들리는 귀를 선택하세요 (1: 왼쪽, 2: 오른쪽):</label>
+            <input type="number" name="ear_choice" min="1" max="2" required><br>
+            <label for="sound_choice">사용할 소리를 선택하세요 (1: 바이노럴 비트, 2: 화이트 노이즈, 3: 핑크 노이즈):</label>
+            <input type="number" name="sound_choice" min="1" max="3" required><br>
+            <div id="wave_type_section" style="display: none;">
+                <label for="wave_type">웨이브 타입을 선택하세요 (1: 알파, 2: 베타, 3: 감마):</label>
+                <input type="number" name="wave_type" min="1" max="3"><br>
+            </div>
+            <input type="submit" value="다운로드">
+        </form>
+    </div>
     <script>
         document.querySelector('input[name="sound_choice"]').addEventListener('change', function() {
             var waveTypeSection = document.getElementById('wave_type_section');

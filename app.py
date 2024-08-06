@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, url_for, send_file, render_template
+from flask import Flask, request, redirect, send_from_directory, url_for, send_file, render_template
 import os
 import numpy as np
 from scipy.io import wavfile
@@ -90,15 +90,31 @@ def calculate_segment_volume(audio, segment_duration_ms):
         segments.append(segment.dBFS)
     return segments
 
+@app.route('/static/<path:filename>')
+def serve_static_from_templates(filename):
+    return send_from_directory('static', filename)
+
+
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
         file = request.files['file']
-        if file and file.filename.endswith('.wav'):
+        if file and (file.filename.endswith('.wav') or file.filename.endswith('.mp3')):
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
             file.save(file_path)
-            return redirect(url_for('process_file', filename=file.filename))
+
+            # MP3 파일을 WAV 파일로 변환
+            if file.filename.endswith('.mp3'):
+                mp3_audio = AudioSegment.from_mp3(file_path)
+                wav_filename = os.path.splitext(file.filename)[0] + '.wav'
+                wav_file_path = os.path.join(app.config['UPLOAD_FOLDER'], wav_filename)
+                mp3_audio.export(wav_file_path, format='wav')
+                os.remove(file_path)  # 원본 MP3 파일 삭제
+                return redirect(url_for('process_file', filename=wav_filename))
+            else:
+                return redirect(url_for('process_file', filename=file.filename))
     return render_template('upload.html')
+
 
 @app.route('/process/<filename>', methods=['GET', 'POST'])
 def process_file(filename):
@@ -195,4 +211,4 @@ def download_file(filename):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True,)
