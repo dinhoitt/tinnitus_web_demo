@@ -6,6 +6,7 @@ from scipy.fft import ifft
 import scipy.signal as signal
 from pydub import AudioSegment
 from pydub.generators import Sine, WhiteNoise
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -98,23 +99,34 @@ def serve_static_from_templates(filename):
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
+        if 'file' not in request.files:
+            print('No file part')
+            return redirect(request.url)
         file = request.files['file']
+        if file.filename == '':
+            print('No selected file')
+            return redirect(request.url)
         if file and (file.filename.endswith('.wav') or file.filename.endswith('.mp3')):
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
+
+            # 파일이 저장되었는지 확인
+            if not os.path.exists(file_path):
+                print(f'File {file_path} not found after saving.')
+                return redirect(request.url)
 
             # MP3 파일을 WAV 파일로 변환
             if file.filename.endswith('.mp3'):
                 mp3_audio = AudioSegment.from_mp3(file_path)
-                wav_filename = os.path.splitext(file.filename)[0] + '.wav'
+                wav_filename = os.path.splitext(filename)[0] + '.wav'
                 wav_file_path = os.path.join(app.config['UPLOAD_FOLDER'], wav_filename)
                 mp3_audio.export(wav_file_path, format='wav')
                 os.remove(file_path)  # 원본 MP3 파일 삭제
                 return redirect(url_for('process_file', filename=wav_filename))
             else:
-                return redirect(url_for('process_file', filename=file.filename))
+                return redirect(url_for('process_file', filename=filename))
     return render_template('upload.html')
-
 
 @app.route('/process/<filename>', methods=['GET', 'POST'])
 def process_file(filename):
